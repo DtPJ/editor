@@ -1,0 +1,33 @@
+{
+  "name": "Markdown Pro Editor",
+  "short_name": "MD Pro",
+  "description": "A powerful, browser-based Markdown editor with live preview, advanced features, and file system access.",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#1e1e1e",
+  "theme_color": "#007acc",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    },
+    {
+      "src": "icons/icon-maskable-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icons/icon-maskable-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "maskable"
+    }
+  ]
+}
