@@ -3,10 +3,10 @@ const CACHE_NAME = 'markdown-editor-v1';
 
 // The list of files to be cached
 const URLS_TO_CACHE = [
-  '.', // Represents the main HTML file
-  'manifest.json',
-  'icons/icon-192.png',
-  'icons/icon-512.png',
+  '/editor/', // Represents the main HTML file
+  '/editor/manifest.json',
+  '/editor/icons/icon-192.png',
+  '/editor/icons/icon-512.png',
 
   // Core Library CSS
   'https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css',
@@ -71,3 +71,4 @@ self.addEventListener('fetch', event => {
     )
   );
 });
+
