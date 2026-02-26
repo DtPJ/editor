@@ -2,7 +2,7 @@
   "name": "Markdown Pro Editor",
   "short_name": "MD Pro",
   "description": "A powerful, browser-based Markdown editor with live preview, advanced features, and file system access.",
-  "start_url": "./",
+  "start_url": ".",
   "display": "standalone",
   "background_color": "#1e1e1e",
   "theme_color": "#007acc",
@@ -31,7 +31,3 @@
     }
   ]
 }
-
-
-
-
