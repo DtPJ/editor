@@ -22,11 +22,13 @@
           --primary: #007acc; --bg: #f7f7f7; --text: #222; --panel-bg: #fff;
           --panel-border: #ccc; --accent-on-light: #007acc; --border: #ccc;
           --cm-bg: #fff; --cm-text: #222; --code-bg: #f6f8fa;
+          --explorer-bg: #f0f0f0; --explorer-hover-bg: #e0e0e0; --explorer-active-bg: #d0d0d0;
         }
         [data-theme="dark"] {
           --bg: #1e1e1e; --text: #eee; --panel-bg: #2b2b2b;
           --panel-border: #555; --border: #555; --cm-bg: #2b2b2b; --cm-text: #eee;
           --code-bg: #161b22;
+          --explorer-bg: #252526; --explorer-hover-bg: #333333; --explorer-active-bg: #3f3f3f;
         }
         html, body {
           height: 100%; margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -53,6 +55,36 @@
         #editorContainer {
           flex: 1; display: flex; padding: 10px 20px; height: calc(100vh - 56px); overflow: hidden; gap: 6px;
         }
+
+        /* --- NEW: File Explorer --- */
+        #fileExplorer {
+            display: flex; flex-direction: column; background: var(--explorer-bg);
+            border: 1px solid var(--panel-border); border-radius: 6px;
+            width: 250px; min-width: 150px; max-width: 400px; transition: width 0.2s, min-width 0.2s;
+            overflow: hidden;
+        }
+        #fileExplorer.collapsed { width: 0; min-width: 0; border: none; }
+        #fileExplorerHeader {
+            padding: 10px; font-weight: bold; font-size: 0.9em;
+            border-bottom: 1px solid var(--panel-border); flex-shrink: 0; color: var(--text);
+            text-transform: uppercase; letter-spacing: 0.5px;
+        }
+        #fileList { list-style: none; padding: 0; margin: 0; overflow-y: auto; flex-grow: 1; }
+        #fileList li {
+            padding: 8px 12px; font-size: 0.9em; cursor: pointer; white-space: nowrap;
+            overflow: hidden; text-overflow: ellipsis; border-bottom: 1px solid var(--panel-border);
+        }
+        #fileList li:last-child { border-bottom: none; }
+        #fileList li:hover { background: var(--explorer-hover-bg); }
+        #fileList li.active { background: var(--explorer-active-bg); font-weight: bold; }
+        #explorerSplitter {
+            width: 6px; cursor: col-resize; background: #ccc; border-radius: 3px; flex: 0 0 6px;
+        }
+        #explorerSplitter.hidden { display: none; }
+        /* --- End File Explorer --- */
+
+        #mainPanel { flex: 1; display: flex; min-width: 0; gap: 6px; }
+
         .CodeMirror, #preview {
           flex: 1; min-width: 150px; height: 100%; border: 1px solid var(--panel-border);
           border-radius: 6px; box-sizing: border-box; background: var(--panel-bg);
@@ -82,6 +114,8 @@
         #preview .callout-todo, #preview .callout-abstract, #preview .callout-hint, #preview .callout-summary, #preview .callout-important, #preview .callout-tldr, #preview .callout-management { border-color: #00bcd4; background: #e0f7fa; color: #00bcd4; }
         #preview .callout-tip, #preview .callout-check, #preview .callout-done, #preview .callout-success, #preview .callout-personnel, #preview .callout-application { border-color: #4caf50; background: #e8f5e9; color: #4caf50; }
         #preview .callout-attention, #preview .callout-caution, #preview .callout-warning, #preview .callout-faq, #preview .callout-question, #preview .callout-help, #preview .callout-infrastructure, #preview .callout-definition, #preview .callout-announcement { border-color: #ff9800; background: #fff3e0; color: #ff9800; }
+        #preview .callout-quote, #preview .callout-govt, #preview .callout-government { border-color: #adb5bd; background: #f8f9fa; color: #212529; }
+        
         [data-theme="dark"] #preview .callout { background: #262a33; }
         [data-theme="dark"] #preview .callout-danger, [data-theme="dark"] #preview .callout-bug { background: #381f1f; }
         [data-theme="dark"] #preview .callout-note, [data-theme="dark"] #preview .callout-info { background: #222c36; }
@@ -89,7 +123,8 @@
         [data-theme="dark"] #preview .callout-important { background: #1c3539; }
         [data-theme="dark"] #preview .callout-success { background: #1c331d; }
         [data-theme="dark"] #preview .callout-warning, [data-theme="dark"] #preview .callout-question { background: #332a1e; }
-        
+        [data-theme="dark"] #preview .callout-quote, [data-theme="dark"] #preview .callout-govt, [data-theme="dark"] #preview .callout-government { border-color: #495057; background: #212529; color: #ced4da; }
+
         /* Highlight.js, Copy Button, and Mermaid SVG Button */
         #preview pre, .mermaid { position: relative; }
         #preview pre code.hljs { padding: 1em; border-radius: 6px; background-color: var(--code-bg); }
@@ -147,6 +182,7 @@
 <body>
     <div id="topBar">
         <button id="themeToggle"><i data-lucide="sun-moon"></i></button>
+        <button id="toggleExplorerBtn" title="Toggle File Explorer"><i data-lucide="panel-left"></i></button>
         <div id="viewModeGroup">
             <button id="viewSideBySide" class="view-mode-btn active"><i data-lucide="square-split-horizontal"></i></button>
             <button id="toggleSourcePreview" class="view-mode-btn"><i data-lucide="pencil"></i></button>
@@ -165,7 +201,18 @@
             <button id="settingsBtn" title="Settings"><i data-lucide="settings"></i></button>
         </div>
     </div>
-    <div id="editorContainer"><textarea id="editor"></textarea><div id="splitter"></div><div id="preview"></div></div>
+
+    <div id="editorContainer">
+        <div id="fileExplorer">
+            <div id="fileExplorerHeader">VAULT</div>
+            <ul id="fileList"></ul>
+        </div>
+        <div id="explorerSplitter"></div>
+        <div id="mainPanel">
+            <textarea id="editor"></textarea><div id="splitter"></div><div id="preview"></div>
+        </div>
+    </div>
+
     <div id="commandPalette" class="command-palette"><input id="commandPaletteInput" class="command-palette-input" type="text" placeholder="Type a command…"><ul id="commandPaletteList" class="command-palette-list"></ul></div>
     <div id="toast-container"></div>
     
@@ -272,11 +319,18 @@
         matchBracketsToggle: document.getElementById('matchBracketsToggle'),
         highlightActiveLineToggle: document.getElementById('highlightActiveLineToggle'),
         codeFoldingToggle: document.getElementById('codeFoldingToggle'),
-        setDirectoryBtn: document.getElementById('setDirectoryBtn')
+        setDirectoryBtn: document.getElementById('setDirectoryBtn'),
+
+        // --- NEW DOM Elements for File Explorer ---
+        mainPanel: document.getElementById('mainPanel'),
+        fileExplorer: document.getElementById('fileExplorer'),
+        explorerSplitter: document.getElementById('explorerSplitter'),
+        fileList: document.getElementById('fileList'),
+        toggleExplorerBtn: document.getElementById('toggleExplorerBtn')
     };
 
     let currentFileHandle = null, currentFileName = 'Untitled.md';
-    let commandPaletteOpen = false, commandIndex = -1, filteredCommands = [], isProgrammaticScroll = false;
+    let commandPaletteOpen = false, commandIndex = -1, filteredCommands = [], isProgrammaticScroll = false, isRendering = false;
     let currentViewMode = 'side-by-side';
     let directoryHandle = null;
     let currentSettings = {};
@@ -394,6 +448,85 @@
         dom.toastContainer.appendChild(toast);
         setTimeout(() => { toast.remove(); }, 7000);
     }
+    
+    // --- NEW: Populate File Explorer ---
+    async function populateFileExplorer() {
+        dom.fileList.innerHTML = '';
+        if (!directoryHandle || !(await verifyDirectoryPermission())) {
+            dom.fileList.innerHTML = '<li>No directory set.</li>';
+            return;
+        }
+
+        let hasFiles = false;
+        try {
+            const sortedFiles = [];
+            for await (const entry of directoryHandle.values()) {
+                if (entry.kind === 'file' && (entry.name.endsWith('.md') || entry.name.endsWith('.markdown'))) {
+                    sortedFiles.push(entry.name);
+                }
+            }
+            sortedFiles.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+
+            for (const fileName of sortedFiles) {
+                const li = document.createElement('li');
+                li.textContent = fileName;
+                li.dataset.filename = fileName;
+                if (fileName === currentFileName) {
+                    li.classList.add('active');
+                }
+                dom.fileList.appendChild(li);
+                hasFiles = true;
+            }
+        } catch(e) {
+            console.error("Error populating file explorer:", e);
+            showToast("Could not read directory contents.", true);
+            directoryHandle = null;
+            await deleteHandle();
+        }
+
+        if (!hasFiles) {
+            dom.fileList.innerHTML = '<li>No Markdown files found.</li>';
+        }
+    }
+
+    // --- NEW: Open File from Explorer ---
+    async function openFileFromExplorer(fileName) {
+        if (!directoryHandle) {
+            showToast("No directory is open.", true);
+            return;
+        }
+        try {
+            const handle = await directoryHandle.getFileHandle(fileName, { create: false });
+            currentFileHandle = handle;
+            const file = await handle.getFile();
+            const contents = await file.text();
+            
+            // Prevent accidental overwrites
+            if (cmEditor.getValue() !== contents) {
+                cmEditor.setValue(contents);
+            }
+            
+            currentFileName = file.name;
+            updateMetaPanel();
+            
+            // Update active state in file list
+            Array.from(dom.fileList.children).forEach(li => {
+                li.classList.toggle('active', li.dataset.filename === currentFileName);
+            });
+
+            localStorage.removeItem(sessionKey); // Clear session to avoid accidental restore
+            showToast(`Opened ${file.name}`);
+        } catch (err) {
+            console.error(err);
+            showToast(`Failed to open ${fileName}.`, true);
+        }
+    }
+
+    dom.fileList.addEventListener('click', (e) => {
+        if (e.target && e.target.tagName === 'LI' && e.target.dataset.filename) {
+            openFileFromExplorer(e.target.dataset.filename);
+        }
+    });
 
     const lucideMap = { note: "pencil", info: "info", todo: "check-square", tip: "flame", success: "check-circle", check: "check", done: "check-circle-2", question: "help-circle", faq: "help-circle", help: "help-circle", warning: "alert-triangle", caution: "alert-triangle", attention: "alert-triangle", danger: "alert-octagon", error: "alert-octagon", bug: "bug", example: "list-tree", quote: "quote", cite: "quote", compliance: "shield-check", rmf: "shield-half", ato: "gavel", vision: "eye", shipyard: "ship", personnel: "user-round", management: "users", infrastructure: "building-2", application: "app-window", threat: "shield-alert", event: "calendar-days", announcement: "megaphone", definition: "book-open", govt: "landmark", food: "beef", win: "trophy", endpoint: "computer", tldr: "book-x", important: "alert-octagon", summary: "book-key", hint: "puzzle", abstract: "clipboard-list", };
     function parseFrontmatter(text) {
@@ -417,9 +550,10 @@
     }
     async function updatePreview() {
         if (!mdLib || !mdLib.parse) { showToast("Markdown library failed to load.", true); return; }
+        isRendering = true;
         try {
             const content = cmEditor.getValue();
-            localStorage.setItem(sessionKey, content);
+            if (!currentFileHandle) { localStorage.setItem(sessionKey, content); }
             const { meta, content: parsedContent } = parseFrontmatter(content);
             const { md: processedMd, calloutBlocks } = parseCallouts(parsedContent);
             updateMetaPanel(meta);
@@ -432,6 +566,7 @@
             dom.previewEl.innerHTML = window.DOMPurify.sanitize(html, { ADD_TAGS: ["i", "div"], ADD_ATTR: ["data-lucide", "class"] });
             await renderEnhancements(dom.previewEl);
         } catch (e) { showToast("An error occurred during preview update.", true); console.error("Update Preview Error:", e); }
+        finally { setTimeout(() => { isRendering = false; }, 50); }
     }
     async function renderEnhancements(container) {
         try {
@@ -475,6 +610,11 @@
         if (tagsText) { html += `<div class="meta-tags"><b>tags:</b> ${escapeHtml(tagsText)}</div>`; }
         if (currentFileName !== 'Untitled.md' || tagsText) { dom.metaPanel.innerHTML = html; dom.metaPanel.style.display = ''; }
         else { dom.metaPanel.innerHTML = ''; dom.metaPanel.style.display = 'none'; }
+        
+        // --- NEW: Update active file in explorer ---
+        Array.from(dom.fileList.children).forEach(li => {
+            li.classList.toggle('active', li.dataset.filename === currentFileName);
+        });
     }
 
     function escapeHtml(str) { return String(str).replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' })[m]); }
@@ -497,13 +637,61 @@
     dom.viewSideBySide.addEventListener('click', () => setViewMode('side-by-side'));
     dom.toggleSourcePreview.addEventListener('click', () => { const nextMode = (currentViewMode === 'source-only') ? 'preview-only' : 'source-only'; setViewMode(nextMode); });
     
-    let isDragging = false;
-    dom.splitter.addEventListener('mousedown', e => { isDragging = true; document.body.style.cursor = 'col-resize'; e.preventDefault(); });
-    document.addEventListener('mousemove', e => { if (!isDragging) return; const leftWidth = e.clientX - dom.editorContainer.getBoundingClientRect().left; const clampedLeft = Math.max(150, Math.min(leftWidth, dom.editorContainer.offsetWidth - 150)); cmWrapper.style.flex = `0 0 ${clampedLeft}px`; });
-    document.addEventListener('mouseup', () => { if (isDragging) { isDragging = false; document.body.style.cursor = ''; } });
+    let isDragging = false, dragTarget = null;
+    function startDrag(e) {
+        isDragging = true;
+        dragTarget = e.target;
+        document.body.style.cursor = 'col-resize';
+        e.preventDefault();
+    }
+    document.addEventListener('mousemove', e => {
+        if (!isDragging || !dragTarget) return;
+        const containerRect = dom.editorContainer.getBoundingClientRect();
+        if (dragTarget === dom.splitter) {
+            const leftWidth = e.clientX - dom.mainPanel.getBoundingClientRect().left;
+            const clampedLeft = Math.max(150, Math.min(leftWidth, dom.mainPanel.offsetWidth - 150));
+            cmWrapper.style.flex = `0 0 ${clampedLeft}px`;
+        } else if (dragTarget === dom.explorerSplitter) {
+            const explorerWidth = e.clientX - containerRect.left;
+            const clampedWidth = Math.max(150, Math.min(explorerWidth, 400));
+            dom.fileExplorer.style.width = `${clampedWidth}px`;
+        }
+    });
+    document.addEventListener('mouseup', () => {
+        if (isDragging) {
+            isDragging = false;
+            dragTarget = null;
+            document.body.style.cursor = '';
+        }
+    });
+    dom.splitter.addEventListener('mousedown', startDrag);
+    dom.explorerSplitter.addEventListener('mousedown', startDrag);
+
+    // --- NEW: Toggle file explorer visibility ---
+    dom.toggleExplorerBtn.addEventListener('click', () => {
+        dom.fileExplorer.classList.toggle('collapsed');
+        dom.explorerSplitter.classList.toggle('hidden');
+        cmEditor.refresh(); // Refresh CodeMirror to adapt to new size
+    });
     
-    cmEditor.on('scroll', () => { if (isProgrammaticScroll) { isProgrammaticScroll = false; return; } requestAnimationFrame(() => { const i = cmEditor.getScrollInfo(); const r = i.height > i.clientHeight ? i.top / (i.height - i.clientHeight) : 0; isProgrammaticScroll = true; dom.previewEl.scrollTop = r * (dom.previewEl.scrollHeight - dom.previewEl.clientHeight); }); });
-    dom.previewEl.addEventListener('scroll', () => { if (isProgrammaticScroll) { isProgrammaticScroll = false; return; } requestAnimationFrame(() => { const r = dom.previewEl.scrollTop / (dom.previewEl.scrollHeight - dom.previewEl.clientHeight); const i = cmEditor.getScrollInfo(); isProgrammaticScroll = true; cmEditor.scrollTo(null, r * (i.height - i.clientHeight)); }); });
+    cmEditor.on('scroll', () => {
+        if (isProgrammaticScroll || isRendering) { isProgrammaticScroll = false; return; }
+        requestAnimationFrame(() => {
+            const i = cmEditor.getScrollInfo();
+            const r = i.height > i.clientHeight ? i.top / (i.height - i.clientHeight) : 0;
+            isProgrammaticScroll = true;
+            dom.previewEl.scrollTop = r * (dom.previewEl.scrollHeight - dom.previewEl.clientHeight);
+        });
+    });
+    dom.previewEl.addEventListener('scroll', () => {
+        if (isProgrammaticScroll || isRendering) { isProgrammaticScroll = false; return; }
+        requestAnimationFrame(() => {
+            const r = dom.previewEl.scrollTop / (dom.previewEl.scrollHeight - dom.previewEl.clientHeight);
+            const i = cmEditor.getScrollInfo();
+            isProgrammaticScroll = true;
+            cmEditor.scrollTo(null, r * (i.height - i.clientHeight));
+        });
+    });
     
     async function openFile() {
         if (!window.showOpenFilePicker) { showToast("Opening file... Please use the file dialog.", false); dom.fileInput.click(); return; }
@@ -515,11 +703,22 @@
             const contents = await file.text();
             cmEditor.setValue(contents);
             currentFileName = file.name; updateMetaPanel(); showToast(`Opened ${file.name}`);
+            if (directoryHandle) { await populateFileExplorer(); } // Refresh explorer
         } catch (err) { if (err.name !== 'AbortError') { console.error(err); showToast("Failed to open file.", true); } }
     }
     async function saveFile() {
         if (currentFileHandle && window.showSaveFilePicker) {
             try {
+                if(directoryHandle) { // Re-verify permissions before writing
+                    const permission = await directoryHandle.queryPermission({ mode: 'readwrite' });
+                    if (permission !== 'granted') {
+                        const newPermission = await directoryHandle.requestPermission({ mode: 'readwrite' });
+                        if (newPermission !== 'granted') {
+                            showToast("Permission to save file was denied.", true);
+                            return saveFileAs(); // Fallback to Save As
+                        }
+                    }
+                }
                 const writable = await currentFileHandle.createWritable();
                 await writable.write(cmEditor.getValue());
                 await writable.close();
@@ -537,22 +736,30 @@
         if(directoryHandle && await verifyDirectoryPermission()) { pickerOpts.startIn = directoryHandle; }
         try {
             currentFileHandle = await window.showSaveFilePicker(pickerOpts);
-            currentFileName = currentFileHandle.name; updateMetaPanel(); await saveFile();
+            currentFileName = currentFileHandle.name; 
+            await saveFile(); // Call original save logic now that handle is set
+            updateMetaPanel();
+            if (directoryHandle) { await populateFileExplorer(); } // Refresh explorer on new file
         } catch (err) { if (err.name !== 'AbortError') { console.error(err); showToast("Failed to save file.", true); } }
     }
     
     dom.fileInput.addEventListener('change', (e) => {
         const file = e.target.files?.[0]; if (!file) return;
         const reader = new FileReader();
-        reader.onload = (evt) => { cmEditor.setValue(evt.target.result); currentFileName = file.name; currentFileHandle = null; updateMetaPanel(); showToast(`Loaded ${file.name}.`); dom.fileInput.value = ''; };
+        reader.onload = (evt) => { 
+            cmEditor.setValue(evt.target.result); 
+            currentFileName = file.name; currentFileHandle = null; 
+            updateMetaPanel(); 
+            showToast(`Loaded ${file.name}.`); 
+            dom.fileInput.value = ''; 
+        };
         reader.readAsText(file);
     });
 
     dom.newFileBtn.addEventListener('click', () => { 
-        if (confirm("Create a new file? Any unsaved changes will be lost.")) { 
-            cmEditor.setValue(''); currentFileHandle = null; currentFileName = 'Untitled.md';
-            localStorage.removeItem(sessionKey); updateMetaPanel(); 
-        } 
+        if (cmEditor.getValue() && !confirm("Create a new file? Any unsaved changes will be lost.")) { return; }
+        cmEditor.setValue(''); currentFileHandle = null; currentFileName = 'Untitled.md';
+        localStorage.removeItem(sessionKey); updateMetaPanel(); 
     });
     dom.openFileBtn.addEventListener('click', openFile);
     dom.saveFileBtn.addEventListener('click', saveFile);
@@ -600,6 +807,7 @@
         try {
             const handle = await window.showDirectoryPicker();
             directoryHandle = handle; await saveHandle(handle); showToast(`Working directory set to: ${handle.name}`);
+            await populateFileExplorer(); // --- NEW: Populate explorer after setting directory ---
         } catch(err) { if (err.name !== 'AbortError') { console.error("Error setting directory:", err); showToast("Could not set directory.", true); } }
     });
 
@@ -612,6 +820,7 @@
         { name: "Editor: Toggle Comment", action: () => cmEditor.execCommand("toggleComment"), icon: "message-square" },
         { name: "Editor: Open Settings...", action: openSettings, icon: "settings" },
         { name: "Toggle Dark/Light Theme", action: () => dom.themeToggle.click(), icon: "sun-moon" },
+        { name: "Toggle File Explorer", action: () => dom.toggleExplorerBtn.click(), icon: "panel-left" },
         { name: "View: Side-by-Side", action: () => setViewMode('side-by-side'), icon: "square-split-horizontal" },
         { name: "View: Source Only", action: () => setViewMode('source-only'), icon: "pencil" },
         { name: "View: Preview Only", action: () => setViewMode('preview-only'), icon: "eye" },
@@ -662,22 +871,13 @@
     async function runExportHtml() {
         try {
             const clonedPreview = dom.previewEl.cloneNode(true);
-            
             clonedPreview.querySelectorAll('script[type^="math/tex"]').forEach(script => script.remove());
-
             clonedPreview.querySelectorAll('.katex-display, .katex').forEach(el => {
-                // Check previous sibling
-                let prevNode = el.previousSibling;
-                if (prevNode && prevNode.nodeType === 3 && prevNode.textContent.trim().startsWith('$')) {
-                    prevNode.remove();
-                }
-                // Check next sibling
-                let nextNode = el.nextSibling;
-                if (nextNode && nextNode.nodeType === 3 && nextNode.textContent.trim().startsWith('$')) {
-                    nextNode.remove();
+                const sibling = el.nextSibling;
+                if (sibling && sibling.nodeType === 3 && sibling.textContent.trim().startsWith('$')) {
+                    sibling.remove();
                 }
             });
-            
             const title = (currentFileName || 'document').replace(/\.\w+$/, '');
             const css = Array.from(document.styleSheets).reduce((acc, sheet) => { try { return acc + Array.from(sheet.cssRules).map(r => r.cssText).join('\n'); } catch { return acc; } }, '');
             const body = `<div id="preview" class="markdown-body">${clonedPreview.innerHTML}</div>`;
@@ -698,19 +898,26 @@
     lucide.createIcons();
     const savedViewMode = localStorage.getItem('editor-view-mode') || 'side-by-side';
     setViewMode(savedViewMode);
-    loadSession(); 
+    loadSettings();
+    
+    if (!currentFileHandle) { loadSession(); }
+
     directoryHandle = await loadHandle();
+    if (directoryHandle) { await populateFileExplorer(); }
+    
     if (!window.showDirectoryPicker) {
         dom.setDirectoryBtn.disabled = true;
         dom.setDirectoryBtn.style.opacity = 0.5;
         dom.setDirectoryBtn.style.cursor = 'not-allowed';
+        dom.fileExplorer.classList.add('collapsed');
+        dom.explorerSplitter.classList.add('hidden');
+        dom.toggleExplorerBtn.style.display = 'none';
     }
     updatePreview();
 
-    // PWA Service Worker Registration
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/service-worker.js').then(registration => {
+        navigator.serviceWorker.register('service-worker.js').then(registration => {
           console.log('ServiceWorker registration successful with scope: ', registration.scope);
         }, err => {
           console.log('ServiceWorker registration failed: ', err);
