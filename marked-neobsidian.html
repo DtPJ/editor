@@ -1,0 +1,931 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Markdown Editor v2</title>
+
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#007acc">
+
+    <!-- Libs CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/darcula.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/dialog/dialog.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldgutter.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/github.min.css">
+    <style id="hljs-dark-theme" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/github-dark.min.css" media="(prefers-color-scheme: dark)" disabled></style>
+
+    <style>
+        :root {
+          --primary: #007acc; --bg: #f7f7f7; --text: #222; --panel-bg: #fff;
+          --panel-border: #ccc; --accent-on-light: #007acc; --border: #ccc;
+          --cm-bg: #fff; --cm-text: #222; --code-bg: #f6f8fa;
+          --explorer-bg: #f0f0f0; --explorer-hover-bg: #e0e0e0; --explorer-active-bg: #d0d0d0;
+        }
+        [data-theme="dark"] {
+          --bg: #1e1e1e; --text: #eee; --panel-bg: #2b2b2b;
+          --panel-border: #555; --border: #555; --cm-bg: #2b2b2b; --cm-text: #eee;
+          --code-bg: #161b22;
+          --explorer-bg: #252526; --explorer-hover-bg: #333333; --explorer-active-bg: #3f3f3f;
+        }
+        html, body {
+          height: 100%; margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+          transition: background 0.3s, color 0.3s; overflow: hidden;
+          background-color: var(--bg); color: var(--text); display: flex; flex-direction: column;
+        }
+        #topBar {
+          padding: 10px 20px; background: var(--primary); color: white;
+          display: flex; flex-wrap: wrap; align-items: center; gap: 12px; flex-shrink: 0;
+        }
+        #buttonGroup { margin-left: auto; display: flex; gap: 8px; }
+        #topBar button {
+          font-size: 0.9em; padding: 6px 10px; border-radius: 4px; border: none;
+          background: #fff; color: var(--accent-on-light); transition: background 0.2s ease;
+          display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+        }
+        #topBar button:hover { background: #e6e6e6; }
+        #topBar button svg { pointer-events: none; }
+        #viewModeGroup, .file-actions-group { display: flex; gap: 8px; }
+        .view-mode-btn.active { background: var(--accent-on-light); color: #fff; }
+        [data-theme="dark"] .view-mode-btn.active { background: #7ed957; color: #222c36; }
+        #metaPanel { padding: 4px 10px; border-radius: 6px; background: rgba(255,255,255,0.15); color: white; font-size: 0.85em; line-height: 1.3; }
+        #metaPanel .meta-filename { font-style: italic; opacity: 0.8; margin-bottom: 2px; font-size: 0.9em; }
+        #editorContainer {
+          flex: 1; display: flex; padding: 10px 20px; height: calc(100vh - 56px); overflow: hidden; gap: 6px;
+        }
+
+        /* --- NEW: File Explorer --- */
+        #fileExplorer {
+            display: flex; flex-direction: column; background: var(--explorer-bg);
+            border: 1px solid var(--panel-border); border-radius: 6px;
+            width: 250px; min-width: 150px; max-width: 400px; transition: width 0.2s, min-width 0.2s;
+            overflow: hidden;
+        }
+        #fileExplorer.collapsed { width: 0; min-width: 0; border: none; }
+        #fileExplorerHeader {
+            padding: 10px; font-weight: bold; font-size: 0.9em;
+            border-bottom: 1px solid var(--panel-border); flex-shrink: 0; color: var(--text);
+            text-transform: uppercase; letter-spacing: 0.5px;
+        }
+        #fileList { list-style: none; padding: 0; margin: 0; overflow-y: auto; flex-grow: 1; }
+        #fileList li {
+            padding: 8px 12px; font-size: 0.9em; cursor: pointer; white-space: nowrap;
+            overflow: hidden; text-overflow: ellipsis; border-bottom: 1px solid var(--panel-border);
+        }
+        #fileList li:last-child { border-bottom: none; }
+        #fileList li:hover { background: var(--explorer-hover-bg); }
+        #fileList li.active { background: var(--explorer-active-bg); font-weight: bold; }
+        #explorerSplitter {
+            width: 6px; cursor: col-resize; background: #ccc; border-radius: 3px; flex: 0 0 6px;
+        }
+        #explorerSplitter.hidden { display: none; }
+        /* --- End File Explorer --- */
+
+        #mainPanel { flex: 1; display: flex; min-width: 0; gap: 6px; }
+
+        .CodeMirror, #preview {
+          flex: 1; min-width: 150px; height: 100%; border: 1px solid var(--panel-border);
+          border-radius: 6px; box-sizing: border-box; background: var(--panel-bg);
+        }
+        #preview { padding: 15px; overflow-y: auto; color: var(--text); }
+        .CodeMirror { font-family: monospace; font-size: 14px; background: var(--cm-bg); color: var(--cm-text); }
+        .cm-s-default.CodeMirror, .cm-s-default .CodeMirror-gutters { background-color: var(--cm-bg); color: var(--cm-text); }
+        .CodeMirror-gutters { border-right-color: var(--panel-border); }
+        #splitter { width: 6px; cursor: col-resize; background: #ccc; border-radius: 3px; flex: 0 0 6px; }
+        #preview ol > li { display: list-item; }
+        #preview table { border-spacing: 0; border-collapse: collapse; display: block; width: max-content; max-width: 100%; overflow: auto; }
+        #preview table th, #preview table td { padding: 6px 13px; border: 1px solid #d0d7de; }
+        #preview table tr { border-top: 1px solid #d8dee4; }
+        #preview table tr:nth-child(2n) { background-color: #f6f8fa; }
+        [data-theme="dark"] #preview table th, [data-theme="dark"] #preview table td { border-color: #30363d; }
+        [data-theme="dark"] #preview table tr:nth-child(2n) { background-color: #161b22; }
+
+        /* Callout Styles */
+        #preview .callout { border-left: 5px solid; padding: 12px 18px; margin: 16px 0; border-radius: 6px; display: flex; gap: 12px; }
+        #preview .callout-icon { flex-shrink: 0; padding-top: 2px; }
+        #preview .callout-content { flex-grow: 1; }
+        #preview .callout .callout-title { font-weight: bold; margin: 0 0 0.5em 0; }
+        #preview .callout p { margin-top: 0; } #preview .callout p:last-child { margin-bottom: 0; }
+        #preview .callout-bug, #preview .callout-danger, #preview .callout-error, #preview .callout-fail, #preview .callout-failure, #preview .callout-missing, #preview .callout-threat { border-color: #f44336; background: #ffebee; color: #f44336; }
+        #preview .callout-example, #preview .callout-info, #preview .callout-note, #preview .callout-endpoint, #preview .callout-event, #preview .callout-win, #preview .callout-food { border-color: #448aff; background: #eaf3ff; color: #448aff; }
+        #preview .callout-compliance, #preview .callout-rmf, #preview .callout-ato, #preview .callout-vision { border-color: #9c6ade; background: #f2e8ff; color: #9c6ade; }
+        #preview .callout-todo, #preview .callout-abstract, #preview .callout-hint, #preview .callout-summary, #preview .callout-important, #preview .callout-tldr, #preview .callout-management { border-color: #00bcd4; background: #e0f7fa; color: #00bcd4; }
+        #preview .callout-tip, #preview .callout-check, #preview .callout-done, #preview .callout-success, #preview .callout-personnel, #preview .callout-application { border-color: #4caf50; background: #e8f5e9; color: #4caf50; }
+        #preview .callout-attention, #preview .callout-caution, #preview .callout-warning, #preview .callout-faq, #preview .callout-question, #preview .callout-help, #preview .callout-infrastructure, #preview .callout-definition, #preview .callout-announcement { border-color: #ff9800; background: #fff3e0; color: #ff9800; }
+        #preview .callout-quote, #preview .callout-govt, #preview .callout-government { border-color: #adb5bd; background: #f8f9fa; color: #212529; }
+        
+        [data-theme="dark"] #preview .callout { background: #262a33; }
+        [data-theme="dark"] #preview .callout-danger, [data-theme="dark"] #preview .callout-bug { background: #381f1f; }
+        [data-theme="dark"] #preview .callout-note, [data-theme="dark"] #preview .callout-info { background: #222c36; }
+        [data-theme="dark"] #preview .callout-compliance, [data-theme="dark"] #preview .callout-rmf { background: #2e223b; }
+        [data-theme="dark"] #preview .callout-important { background: #1c3539; }
+        [data-theme="dark"] #preview .callout-success { background: #1c331d; }
+        [data-theme="dark"] #preview .callout-warning, [data-theme="dark"] #preview .callout-question { background: #332a1e; }
+        [data-theme="dark"] #preview .callout-quote, [data-theme="dark"] #preview .callout-govt, [data-theme="dark"] #preview .callout-government { border-color: #495057; background: #212529; color: #ced4da; }
+
+        /* Highlight.js, Copy Button, and Mermaid SVG Button */
+        #preview pre, .mermaid { position: relative; }
+        #preview pre code.hljs { padding: 1em; border-radius: 6px; background-color: var(--code-bg); }
+        .code-copy-btn, .mermaid-export-btn {
+          position: absolute; top: 8px; right: 8px; background: var(--panel-bg); color: var(--text);
+          border: 1px solid var(--border); padding: 2px; font-size: 0.75rem;
+          border-radius: 4px; cursor: pointer; opacity: 0; transition: opacity 0.15s;
+          display: flex; align-items: center; justify-content: center;
+          width: 24px; height: 24px;
+        }
+        pre:hover .code-copy-btn, .mermaid:hover .mermaid-export-btn { opacity: 0.6; }
+        .code-copy-btn:hover, .mermaid-export-btn:hover { opacity: 1; }
+
+        /* Command Palette */
+        .command-palette {
+            display: none; position: absolute; top: 50px; left: 50%; transform: translateX(-50%);
+            z-index: 1000; width: 400px; background: var(--panel-bg); border: 1px solid var(--border);
+            border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+        }
+        .command-palette-input {
+            width: 100%; padding: 12px; font-size: 1rem; background: transparent; color: var(--text);
+            border: none; border-bottom: 1px solid var(--border); box-sizing: border-box; outline: none;
+        }
+        .command-palette-list { list-style: none; margin: 0; padding: 8px; max-height: 300px; overflow-y: auto; }
+        .command-palette-list li { padding: 8px 12px; cursor: pointer; border-radius: 4px; display: flex; align-items: center; gap: 10px; }
+        .command-palette-list li.active { background: var(--primary); color: white; }
+        .command-palette-list li svg { width: 16px; height: 16px; opacity: 0.8; }
+        .command-palette-list li.active svg { opacity: 1; }
+
+        /* Search/Replace Dialog Styles */
+        .CodeMirror-dialog { background-color: var(--panel-bg); border-color: var(--panel-border); color: var(--text); padding: 8px; }
+        .CodeMirror-dialog input { background-color: var(--bg); color: var(--text); border: 1px solid var(--border); padding: 4px 8px; border-radius: 4px; outline: none; }
+        .CodeMirror-search-field:focus { border-color: var(--primary) !important; }
+
+        /* Toast Notification Styles */
+        #toast-container { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 2000; display: flex; flex-direction: column; gap: 10px; }
+        .toast { padding: 12px 20px; border-radius: 6px; background: #333; color: white; box-shadow: 0 4px 12px rgba(0,0,0,0.2); animation: toast-in 0.3s ease; }
+        .toast.error { background: #d32f2f; }
+        @keyframes toast-in { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Settings Modal Styles */
+        .modal-backdrop { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 2000; display: flex; justify-content: center; align-items: flex-start; padding-top: 10vh; }
+        .modal { background: var(--panel-bg); color: var(--text); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.2); width: 450px; max-width: 90%; }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+        .modal-header h2 { margin: 0; font-size: 1.1rem; }
+        .modal-close-btn { background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text); opacity: 0.7; }
+        .modal-body { padding: 16px; }
+        .setting-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; gap: 12px; }
+        .setting-row label { font-size: 0.9rem; }
+        .setting-row select, .setting-row input, .setting-row button { background: var(--bg); color: var(--text); border: 1px solid var(--border); padding: 6px 10px; border-radius: 4px; }
+        .setting-row button { cursor: pointer; background: var(--primary); color: white; border-color: var(--primary); }
+        #directory-note { font-size: 0.8rem; opacity: 0.7; margin-top: -8px; }
+    </style>
+</head>
+<body>
+    <div id="topBar">
+        <button id="themeToggle"><i data-lucide="sun-moon"></i></button>
+        <button id="toggleExplorerBtn" title="Toggle File Explorer"><i data-lucide="panel-left"></i></button>
+        <div id="viewModeGroup">
+            <button id="viewSideBySide" class="view-mode-btn active"><i data-lucide="square-split-horizontal"></i></button>
+            <button id="toggleSourcePreview" class="view-mode-btn"><i data-lucide="pencil"></i></button>
+        </div>
+        <div class="file-actions-group">
+            <button id="newFileBtn" title="New File"><i data-lucide="file-plus"></i></button>
+            <button id="openFileBtn" title="Open File"><i data-lucide="folder-open"></i></button>
+        </div>
+        <input type="file" id="fileInput" accept=".md,.markdown,text/markdown" style="display: none;">
+        <div id="metaPanel"></div>
+        <div id="buttonGroup">
+            <button id="paletteButton"><i data-lucide="terminal"></i></button>
+            <button id="saveFileBtn"><i data-lucide="save"></i> Save</button>
+            <button id="exportHtmlBtn">Export HTML</button>
+            <button id="exportDocxBtn">Export DOCX</button>
+            <button id="settingsBtn" title="Settings"><i data-lucide="settings"></i></button>
+        </div>
+    </div>
+
+    <div id="editorContainer">
+        <div id="fileExplorer">
+            <div id="fileExplorerHeader">VAULT</div>
+            <ul id="fileList"></ul>
+        </div>
+        <div id="explorerSplitter"></div>
+        <div id="mainPanel">
+            <textarea id="editor"></textarea><div id="splitter"></div><div id="preview"></div>
+        </div>
+    </div>
+
+    <div id="commandPalette" class="command-palette"><input id="commandPaletteInput" class="command-palette-input" type="text" placeholder="Type a command…"><ul id="commandPaletteList" class="command-palette-list"></ul></div>
+    <div id="toast-container"></div>
+    
+    <div id="settingsModal" class="modal-backdrop" style="display: none;">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>Settings</h2>
+                <button id="closeSettingsBtn" class="modal-close-btn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="setting-row">
+                    <label for="keybindingSelect">Keybinding</label>
+                    <select id="keybindingSelect">
+                        <option value="default">Standard</option>
+                        <option value="vim">Vim</option>
+                        <option value="emacs">Emacs</option>
+                    </select>
+                </div>
+                <div class="setting-row">
+                    <label for="fontSizeInput">Editor Font Size</label>
+                    <input type="number" id="fontSizeInput" min="10" max="24" step="1">
+                </div>
+                <div class="setting-row">
+                    <label for="lineNumbersToggle">Show Line Numbers</label>
+                    <input type="checkbox" id="lineNumbersToggle">
+                </div>
+                <div class="setting-row">
+                    <label for="lineWrappingToggle">Wrap Lines</label>
+                    <input type="checkbox" id="lineWrappingToggle">
+                </div>
+                <div class="setting-row">
+                    <label for="autoCloseBracketsToggle">Auto Close Brackets</label>
+                    <input type="checkbox" id="autoCloseBracketsToggle">
+                </div>
+                <div class="setting-row">
+                    <label for="matchBracketsToggle">Highlight Matching Brackets</label>
+                    <input type="checkbox" id="matchBracketsToggle">
+                </div>
+                <div class="setting-row">
+                    <label for="highlightActiveLineToggle">Highlight Active Line</label>
+                    <input type="checkbox" id="highlightActiveLineToggle">
+                </div>
+                <div class="setting-row">
+                    <label for="codeFoldingToggle">Enable Code Folding</label>
+                    <input type="checkbox" id="codeFoldingToggle">
+                </div>
+                <hr style="border: none; border-top: 1px solid var(--border); margin: 16px 0;">
+                <div class="setting-row">
+                    <label>Default Directory</label>
+                    <button id="setDirectoryBtn">Set Working Directory</button>
+                </div>
+                <p id="directory-note">Note: For security, the browser will ask you to re-approve access each time you open the editor.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- CORE SCRIPTS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/16.3.0/lib/marked.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.8/purify.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.12.0/mermaid.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"></script>
+
+    <!-- OTHER SCRIPTS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/markdown/markdown.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/display/autorefresh.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/dialog/dialog.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/search/searchcursor.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/search/search.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/keymap/vim.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/keymap/emacs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closebrackets.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/matchbrackets.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/selection/active-line.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/comment/comment.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldcode.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldgutter.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/brace-fold.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/markdown-fold.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html-docx-js/dist/html-docx.min.js"></script>
+
+<script>
+(async function () {
+    const dom = {
+        previewEl: document.getElementById('preview'), splitter: document.getElementById('splitter'), editorContainer: document.getElementById('editorContainer'),
+        themeToggle: document.getElementById('themeToggle'), viewSideBySide: document.getElementById('viewSideBySide'),
+        toggleSourcePreview: document.getElementById('toggleSourcePreview'), metaPanel: document.getElementById('metaPanel'),
+        newFileBtn: document.getElementById('newFileBtn'), openFileBtn: document.getElementById('openFileBtn'), saveFileBtn: document.getElementById('saveFileBtn'),
+        exportHtmlBtn: document.getElementById('exportHtmlBtn'), exportDocxBtn: document.getElementById('exportDocxBtn'),
+        paletteButton: document.getElementById('paletteButton'),
+        commandPalette: document.getElementById('commandPalette'), commandPaletteInput: document.getElementById('commandPaletteInput'),
+        commandPaletteList: document.getElementById('commandPaletteList'), darkThemeStyle: document.getElementById('hljs-dark-theme'),
+        toastContainer: document.getElementById('toast-container'), fileInput: document.getElementById('fileInput'),
+        settingsBtn: document.getElementById('settingsBtn'), settingsModal: document.getElementById('settingsModal'),
+        closeSettingsBtn: document.getElementById('closeSettingsBtn'), keybindingSelect: document.getElementById('keybindingSelect'),
+        fontSizeInput: document.getElementById('fontSizeInput'),
+        lineNumbersToggle: document.getElementById('lineNumbersToggle'),
+        lineWrappingToggle: document.getElementById('lineWrappingToggle'),
+        autoCloseBracketsToggle: document.getElementById('autoCloseBracketsToggle'),
+        matchBracketsToggle: document.getElementById('matchBracketsToggle'),
+        highlightActiveLineToggle: document.getElementById('highlightActiveLineToggle'),
+        codeFoldingToggle: document.getElementById('codeFoldingToggle'),
+        setDirectoryBtn: document.getElementById('setDirectoryBtn'),
+
+        // --- NEW DOM Elements for File Explorer ---
+        mainPanel: document.getElementById('mainPanel'),
+        fileExplorer: document.getElementById('fileExplorer'),
+        explorerSplitter: document.getElementById('explorerSplitter'),
+        fileList: document.getElementById('fileList'),
+        toggleExplorerBtn: document.getElementById('toggleExplorerBtn')
+    };
+
+    let currentFileHandle = null, currentFileName = 'Untitled.md';
+    let commandPaletteOpen = false, commandIndex = -1, filteredCommands = [], isProgrammaticScroll = false, isRendering = false;
+    let currentViewMode = 'side-by-side';
+    let directoryHandle = null;
+    let currentSettings = {};
+    
+    const sessionKey = 'markdown-editor-session';
+    const settingsKey = 'markdown-editor-settings';
+
+    const dbName = 'editor-db', storeName = 'handles';
+    function getDb() {
+        return new Promise((resolve, reject) => {
+            const request = indexedDB.open(dbName, 1);
+            request.onupgradeneeded = () => request.result.createObjectStore(storeName);
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+    }
+    async function saveHandle(handle) {
+        const db = await getDb();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(storeName, 'readwrite');
+            tx.objectStore(storeName).put(handle, 'directory');
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+        });
+    }
+    async function loadHandle() {
+        try {
+            const db = await getDb();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(storeName, 'readonly');
+                const request = tx.objectStore(storeName).get('directory');
+                tx.oncomplete = () => resolve(request.result);
+                tx.onerror = () => reject(tx.error);
+            });
+        } catch (e) { console.error("Failed to load directory handle from IndexedDB", e); return null; }
+    }
+    async function deleteHandle() {
+        const db = await getDb();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(storeName, 'readwrite');
+            tx.objectStore(storeName).delete('directory');
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+        });
+    }
+    
+    async function verifyDirectoryPermission() {
+        if (!directoryHandle) return false;
+        try {
+            const options = { mode: 'readwrite' };
+            if (await directoryHandle.queryPermission(options) === 'granted') return true;
+            if (await directoryHandle.requestPermission(options) === 'granted') return true;
+            directoryHandle = null; await deleteHandle(); showToast("Directory permission was denied.", true);
+            return false;
+        } catch(e) { console.error("Error verifying directory permission:", e); directoryHandle = null; await deleteHandle(); return false; }
+    }
+
+    const mdLib = window.marked;
+    if (mdLib) { mdLib.setOptions({ breaks: true, gfm: true }); }
+    
+    const defaultSettings = {
+        keyMap: 'default', fontSize: 14, lineNumbers: true, lineWrapping: true,
+        autoCloseBrackets: true, matchBrackets: true, highlightActiveLine: true, codeFolding: true
+    };
+    
+    function loadSettings() {
+        let settings = { ...defaultSettings };
+        const savedSettings = localStorage.getItem(settingsKey);
+        if (savedSettings) { try { settings = { ...settings, ...JSON.parse(savedSettings) }; } catch (e) { console.error("Could not parse settings, using defaults.", e); } }
+        currentSettings = settings;
+        dom.keybindingSelect.value = settings.keyMap;
+        dom.fontSizeInput.value = settings.fontSize;
+        dom.lineNumbersToggle.checked = settings.lineNumbers;
+        dom.lineWrappingToggle.checked = settings.lineWrapping;
+        dom.autoCloseBracketsToggle.checked = settings.autoCloseBrackets;
+        dom.matchBracketsToggle.checked = settings.matchBrackets;
+        dom.highlightActiveLineToggle.checked = settings.highlightActiveLine;
+        dom.codeFoldingToggle.checked = settings.codeFolding;
+        return settings;
+    }
+    const initialSettings = loadSettings();
+
+    const initialIsDark = localStorage.getItem('editor-theme') === 'dark';
+    const cmEditor = CodeMirror.fromTextArea(document.getElementById('editor'), {
+        mode: 'markdown', autoRefresh: true, theme: initialIsDark ? 'darcula' : 'default',
+        keyMap: initialSettings.keyMap,
+        lineNumbers: initialSettings.lineNumbers,
+        lineWrapping: initialSettings.lineWrapping,
+        autoCloseBrackets: initialSettings.autoCloseBrackets,
+        matchBrackets: initialSettings.matchBrackets,
+        styleActiveLine: initialSettings.highlightActiveLine,
+        foldGutter: initialSettings.codeFolding,
+        gutters: [
+            (initialSettings.lineNumbers ? "CodeMirror-linenumbers" : ""),
+            (initialSettings.codeFolding ? "CodeMirror-foldgutter" : "")
+        ].filter(Boolean),
+        extraKeys: { 'Ctrl-/': 'toggleComment', 'Cmd-/': 'toggleComment' }
+    });
+    const cmWrapper = cmEditor.getWrapperElement();
+    cmWrapper.style.fontSize = `${initialSettings.fontSize}px`;
+    
+    function applyTheme(isDark) {
+        document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
+        cmEditor.setOption('theme', isDark ? 'darcula' : 'default');
+        if(dom.darkThemeStyle) dom.darkThemeStyle.disabled = !isDark;
+        try { window.mermaid.initialize({ startOnLoad: false, theme: isDark ? 'dark' : 'default', securityLevel: 'loose', htmlLabels: true }); }
+        catch(e) { showToast("Mermaid theme init failed.", true); console.error(e); }
+    }
+    applyTheme(initialIsDark);
+
+    function showToast(message, isError = false) {
+        const toast = document.createElement('div');
+        toast.className = `toast ${isError ? 'error' : ''}`;
+        toast.textContent = message;
+        dom.toastContainer.appendChild(toast);
+        setTimeout(() => { toast.remove(); }, 7000);
+    }
+    
+    // --- NEW: Populate File Explorer ---
+    async function populateFileExplorer() {
+        dom.fileList.innerHTML = '';
+        if (!directoryHandle || !(await verifyDirectoryPermission())) {
+            dom.fileList.innerHTML = '<li>No directory set.</li>';
+            return;
+        }
+
+        let hasFiles = false;
+        try {
+            const sortedFiles = [];
+            for await (const entry of directoryHandle.values()) {
+                if (entry.kind === 'file' && (entry.name.endsWith('.md') || entry.name.endsWith('.markdown'))) {
+                    sortedFiles.push(entry.name);
+                }
+            }
+            sortedFiles.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+
+            for (const fileName of sortedFiles) {
+                const li = document.createElement('li');
+                li.textContent = fileName;
+                li.dataset.filename = fileName;
+                if (fileName === currentFileName) {
+                    li.classList.add('active');
+                }
+                dom.fileList.appendChild(li);
+                hasFiles = true;
+            }
+        } catch(e) {
+            console.error("Error populating file explorer:", e);
+            showToast("Could not read directory contents.", true);
+            directoryHandle = null;
+            await deleteHandle();
+        }
+
+        if (!hasFiles) {
+            dom.fileList.innerHTML = '<li>No Markdown files found.</li>';
+        }
+    }
+
+    // --- NEW: Open File from Explorer ---
+    async function openFileFromExplorer(fileName) {
+        if (!directoryHandle) {
+            showToast("No directory is open.", true);
+            return;
+        }
+        try {
+            const handle = await directoryHandle.getFileHandle(fileName, { create: false });
+            currentFileHandle = handle;
+            const file = await handle.getFile();
+            const contents = await file.text();
+            
+            // Prevent accidental overwrites
+            if (cmEditor.getValue() !== contents) {
+                cmEditor.setValue(contents);
+            }
+            
+            currentFileName = file.name;
+            updateMetaPanel();
+            
+            // Update active state in file list
+            Array.from(dom.fileList.children).forEach(li => {
+                li.classList.toggle('active', li.dataset.filename === currentFileName);
+            });
+
+            localStorage.removeItem(sessionKey); // Clear session to avoid accidental restore
+            showToast(`Opened ${file.name}`);
+        } catch (err) {
+            console.error(err);
+            showToast(`Failed to open ${fileName}.`, true);
+        }
+    }
+
+    dom.fileList.addEventListener('click', (e) => {
+        if (e.target && e.target.tagName === 'LI' && e.target.dataset.filename) {
+            openFileFromExplorer(e.target.dataset.filename);
+        }
+    });
+
+    const lucideMap = { note: "pencil", info: "info", todo: "check-square", tip: "flame", success: "check-circle", check: "check", done: "check-circle-2", question: "help-circle", faq: "help-circle", help: "help-circle", warning: "alert-triangle", caution: "alert-triangle", attention: "alert-triangle", danger: "alert-octagon", error: "alert-octagon", bug: "bug", example: "list-tree", quote: "quote", cite: "quote", compliance: "shield-check", rmf: "shield-half", ato: "gavel", vision: "eye", shipyard: "ship", personnel: "user-round", management: "users", infrastructure: "building-2", application: "app-window", threat: "shield-alert", event: "calendar-days", announcement: "megaphone", definition: "book-open", govt: "landmark", food: "beef", win: "trophy", endpoint: "computer", tldr: "book-x", important: "alert-octagon", summary: "book-key", hint: "puzzle", abstract: "clipboard-list", };
+    function parseFrontmatter(text) {
+        const yamlMatch = text.match(/^\s*---\s*\r?\n([\s\S]*?)\r?\n---\s*(\r?\n|$)/);
+        if (yamlMatch) {
+            let meta = null; try { meta = window.jsyaml.load(yamlMatch[1]); } catch (e) { showToast("Frontmatter parsing error.", true); console.error(e); }
+            return { meta, content: text.slice(yamlMatch[0].length) };
+        }
+        return { meta: null, content: text };
+    }
+    function parseCallouts(md) {
+        const calloutRegex = /(^> ?\[\!(?<type>\w+)\](?<title>.*)?\n(?<body>(?:> .*\n?)*))/gm;
+        let blocks = []; let idx = 0;
+        const replacedMd = md.replace(calloutRegex, (match, ...args) => {
+            const groups = args.pop();
+            const placeholder = `@@CALLOUT_BLOCK_${idx}@@`;
+            blocks.push({ placeholder: placeholder, type: groups.type.toLowerCase(), title: (groups.title || '').trim() || groups.type.charAt(0).toUpperCase() + groups.type.slice(1), body: groups.body.replace(/^> /gm, ''), iconName: lucideMap[groups.type.toLowerCase()] || 'file-text' });
+            idx++; return placeholder + '\n';
+        });
+        return { md: replacedMd, calloutBlocks: blocks };
+    }
+    async function updatePreview() {
+        if (!mdLib || !mdLib.parse) { showToast("Markdown library failed to load.", true); return; }
+        isRendering = true;
+        try {
+            const content = cmEditor.getValue();
+            if (!currentFileHandle) { localStorage.setItem(sessionKey, content); }
+            const { meta, content: parsedContent } = parseFrontmatter(content);
+            const { md: processedMd, calloutBlocks } = parseCallouts(parsedContent);
+            updateMetaPanel(meta);
+            let html = await mdLib.parse(processedMd || '');
+            for (const block of calloutBlocks) {
+                const bodyHtml = await mdLib.parse(block.body || '');
+                const calloutHtml = `<div class="callout callout-${block.type}"><div class="callout-icon"><i data-lucide="${block.iconName}"></i></div><div class="callout-content"><div class="callout-title">${escapeHtml(block.title)}</div>${bodyHtml}</div></div>`;
+                html = html.replace(block.placeholder, calloutHtml);
+            }
+            dom.previewEl.innerHTML = window.DOMPurify.sanitize(html, { ADD_TAGS: ["i", "div"], ADD_ATTR: ["data-lucide", "class"] });
+            await renderEnhancements(dom.previewEl);
+        } catch (e) { showToast("An error occurred during preview update.", true); console.error("Update Preview Error:", e); }
+        finally { setTimeout(() => { isRendering = false; }, 50); }
+    }
+    async function renderEnhancements(container) {
+        try {
+            const mermaidNodes = container.querySelectorAll('pre code.language-mermaid');
+            for (const node of mermaidNodes) { const div = document.createElement('div'); div.className = 'mermaid'; div.textContent = node.textContent; node.parentElement.replaceWith(div); }
+            if (mermaidNodes.length > 0) await mermaid.run({ nodes: container.querySelectorAll('.mermaid') });
+            container.querySelectorAll('.mermaid').forEach((mermaidDiv) => {
+                if (mermaidDiv.querySelector('.mermaid-export-btn')) return;
+                const btn = document.createElement('button');
+                btn.className = 'mermaid-export-btn'; btn.title = 'Download as SVG'; btn.innerHTML = '<i data-lucide="download"></i>';
+                btn.onclick = (e) => {
+                    e.stopPropagation();
+                    const svg = mermaidDiv.querySelector('svg');
+                    if (svg) { const svgData = new XMLSerializer().serializeToString(svg); downloadFile(`mermaid-diagram-${Date.now()}.svg`, svgData, 'image/svg+xml;charset=utf-8'); showToast('SVG download started.'); }
+                    else { showToast('Could not find SVG to download.', true); }
+                };
+                mermaidDiv.appendChild(btn);
+            });
+        } catch (e) { showToast("Mermaid rendering failed.", true); console.warn(e); }
+        try { if (window.renderMathInElement) window.renderMathInElement(container, { delimiters: [{ left: "$$", right: "$$", display: true }, { left: "$", right: "$", display: false }] }); }
+        catch (e) { showToast("KaTeX rendering failed.", true); console.warn(e); }
+        try {
+            container.querySelectorAll('pre code:not(.language-mermaid)').forEach((block) => {
+                window.hljs.highlightElement(block);
+                const pre = block.parentElement; if (pre.querySelector('.code-copy-btn')) return;
+                const btn = document.createElement('button'); btn.className = 'code-copy-btn'; btn.title = 'Copy Code'; btn.innerHTML = '<i data-lucide="copy"></i>';
+                btn.onclick = () => { navigator.clipboard.writeText(block.textContent).then(() => { showToast('Code copied to clipboard.'); }); };
+                pre.appendChild(btn);
+            });
+        } catch (e) { showToast("Syntax highlighting failed.", true); console.warn(e); }
+        lucide.createIcons({ context: container });
+    }
+    
+    function updateMetaPanel(meta) {
+        let tagsText = '';
+        if (meta && typeof meta === 'object') {
+            const rawTags = meta.tags || meta.tag || meta.categories || meta.category || null;
+            if (rawTags) { tagsText = Array.isArray(rawTags) ? rawTags.map(t => String(t).trim()).filter(Boolean).join(', ') : String(rawTags).trim().split(/,?\s+/).filter(Boolean).join(', '); }
+        }
+        let html = `<div class="meta-filename">${escapeHtml(currentFileName)}</div>`;
+        if (tagsText) { html += `<div class="meta-tags"><b>tags:</b> ${escapeHtml(tagsText)}</div>`; }
+        if (currentFileName !== 'Untitled.md' || tagsText) { dom.metaPanel.innerHTML = html; dom.metaPanel.style.display = ''; }
+        else { dom.metaPanel.innerHTML = ''; dom.metaPanel.style.display = 'none'; }
+        
+        // --- NEW: Update active file in explorer ---
+        Array.from(dom.fileList.children).forEach(li => {
+            li.classList.toggle('active', li.dataset.filename === currentFileName);
+        });
+    }
+
+    function escapeHtml(str) { return String(str).replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' })[m]); }
+    
+    let debounceTimer;
+    cmEditor.on('change', () => { clearTimeout(debounceTimer); debounceTimer = setTimeout(updatePreview, 250); });
+
+    dom.themeToggle.addEventListener('click', () => { const isDark = document.documentElement.getAttribute('data-theme') !== 'dark'; applyTheme(isDark); localStorage.setItem('editor-theme', isDark ? 'dark' : 'light'); });
+    
+    function setViewMode(mode) {
+        currentViewMode = mode;
+        [dom.viewSideBySide, dom.toggleSourcePreview].forEach(btn => btn.classList.remove('active'));
+        cmWrapper.style.flex = '1'; dom.previewEl.style.flex = '1';
+        if (mode === 'side-by-side') { dom.viewSideBySide.classList.add('active'); cmWrapper.style.display = ''; dom.previewEl.style.display = ''; dom.splitter.style.display = ''; }
+        else if (mode === 'source-only') { dom.toggleSourcePreview.classList.add('active'); cmWrapper.style.display = ''; dom.previewEl.style.display = 'none'; dom.splitter.style.display = 'none'; }
+        else { dom.toggleSourcePreview.classList.add('active'); cmWrapper.style.display = 'none'; dom.previewEl.style.display = ''; dom.splitter.style.display = 'none'; }
+        dom.toggleSourcePreview.innerHTML = `<i data-lucide="${currentViewMode === 'source-only' ? 'eye' : 'pencil'}"></i>`;
+        lucide.createIcons(); cmEditor.refresh(); localStorage.setItem('editor-view-mode', mode);
+    }
+    dom.viewSideBySide.addEventListener('click', () => setViewMode('side-by-side'));
+    dom.toggleSourcePreview.addEventListener('click', () => { const nextMode = (currentViewMode === 'source-only') ? 'preview-only' : 'source-only'; setViewMode(nextMode); });
+    
+    let isDragging = false, dragTarget = null;
+    function startDrag(e) {
+        isDragging = true;
+        dragTarget = e.target;
+        document.body.style.cursor = 'col-resize';
+        e.preventDefault();
+    }
+    document.addEventListener('mousemove', e => {
+        if (!isDragging || !dragTarget) return;
+        const containerRect = dom.editorContainer.getBoundingClientRect();
+        if (dragTarget === dom.splitter) {
+            const leftWidth = e.clientX - dom.mainPanel.getBoundingClientRect().left;
+            const clampedLeft = Math.max(150, Math.min(leftWidth, dom.mainPanel.offsetWidth - 150));
+            cmWrapper.style.flex = `0 0 ${clampedLeft}px`;
+        } else if (dragTarget === dom.explorerSplitter) {
+            const explorerWidth = e.clientX - containerRect.left;
+            const clampedWidth = Math.max(150, Math.min(explorerWidth, 400));
+            dom.fileExplorer.style.width = `${clampedWidth}px`;
+        }
+    });
+    document.addEventListener('mouseup', () => {
+        if (isDragging) {
+            isDragging = false;
+            dragTarget = null;
+            document.body.style.cursor = '';
+        }
+    });
+    dom.splitter.addEventListener('mousedown', startDrag);
+    dom.explorerSplitter.addEventListener('mousedown', startDrag);
+
+    // --- NEW: Toggle file explorer visibility ---
+    dom.toggleExplorerBtn.addEventListener('click', () => {
+        dom.fileExplorer.classList.toggle('collapsed');
+        dom.explorerSplitter.classList.toggle('hidden');
+        cmEditor.refresh(); // Refresh CodeMirror to adapt to new size
+    });
+    
+    cmEditor.on('scroll', () => {
+        if (isProgrammaticScroll || isRendering) { isProgrammaticScroll = false; return; }
+        requestAnimationFrame(() => {
+            const i = cmEditor.getScrollInfo();
+            const r = i.height > i.clientHeight ? i.top / (i.height - i.clientHeight) : 0;
+            isProgrammaticScroll = true;
+            dom.previewEl.scrollTop = r * (dom.previewEl.scrollHeight - dom.previewEl.clientHeight);
+        });
+    });
+    dom.previewEl.addEventListener('scroll', () => {
+        if (isProgrammaticScroll || isRendering) { isProgrammaticScroll = false; return; }
+        requestAnimationFrame(() => {
+            const r = dom.previewEl.scrollTop / (dom.previewEl.scrollHeight - dom.previewEl.clientHeight);
+            const i = cmEditor.getScrollInfo();
+            isProgrammaticScroll = true;
+            cmEditor.scrollTo(null, r * (i.height - i.clientHeight));
+        });
+    });
+    
+    async function openFile() {
+        if (!window.showOpenFilePicker) { showToast("Opening file... Please use the file dialog.", false); dom.fileInput.click(); return; }
+        const pickerOpts = {};
+        if(directoryHandle && await verifyDirectoryPermission()) { pickerOpts.startIn = directoryHandle; }
+        try {
+            [currentFileHandle] = await window.showOpenFilePicker({ ...pickerOpts, types: [{ description: 'Markdown Files', accept: { 'text/markdown': ['.md', '.markdown'] } }] });
+            const file = await currentFileHandle.getFile();
+            const contents = await file.text();
+            cmEditor.setValue(contents);
+            currentFileName = file.name; updateMetaPanel(); showToast(`Opened ${file.name}`);
+            if (directoryHandle) { await populateFileExplorer(); } // Refresh explorer
+        } catch (err) { if (err.name !== 'AbortError') { console.error(err); showToast("Failed to open file.", true); } }
+    }
+    async function saveFile() {
+        if (currentFileHandle && window.showSaveFilePicker) {
+            try {
+                if(directoryHandle) { // Re-verify permissions before writing
+                    const permission = await directoryHandle.queryPermission({ mode: 'readwrite' });
+                    if (permission !== 'granted') {
+                        const newPermission = await directoryHandle.requestPermission({ mode: 'readwrite' });
+                        if (newPermission !== 'granted') {
+                            showToast("Permission to save file was denied.", true);
+                            return saveFileAs(); // Fallback to Save As
+                        }
+                    }
+                }
+                const writable = await currentFileHandle.createWritable();
+                await writable.write(cmEditor.getValue());
+                await writable.close();
+                showToast(`${currentFileName} saved.`);
+            } catch (err) { console.error(err); showToast("Failed to save file. Permissions may have been revoked.", true); await saveFileAs(); }
+        } else { saveFileAs(); }
+    }
+    async function saveFileAs() {
+        const pickerOpts = { suggestedName: currentFileName, types: [{ description: 'Markdown Files', accept: { 'text/markdown': ['.md', '.markdown'] } }] };
+        if (!window.showSaveFilePicker) {
+            const fileName = prompt("Save as:", currentFileName);
+            if (fileName) { currentFileName = fileName; updateMetaPanel(); downloadFile(fileName, cmEditor.getValue(), 'text/markdown;charset=utf-8'); showToast(`Downloading ${fileName}.`); }
+            return;
+        }
+        if(directoryHandle && await verifyDirectoryPermission()) { pickerOpts.startIn = directoryHandle; }
+        try {
+            currentFileHandle = await window.showSaveFilePicker(pickerOpts);
+            currentFileName = currentFileHandle.name; 
+            await saveFile(); // Call original save logic now that handle is set
+            updateMetaPanel();
+            if (directoryHandle) { await populateFileExplorer(); } // Refresh explorer on new file
+        } catch (err) { if (err.name !== 'AbortError') { console.error(err); showToast("Failed to save file.", true); } }
+    }
+    
+    dom.fileInput.addEventListener('change', (e) => {
+        const file = e.target.files?.[0]; if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (evt) => { 
+            cmEditor.setValue(evt.target.result); 
+            currentFileName = file.name; currentFileHandle = null; 
+            updateMetaPanel(); 
+            showToast(`Loaded ${file.name}.`); 
+            dom.fileInput.value = ''; 
+        };
+        reader.readAsText(file);
+    });
+
+    dom.newFileBtn.addEventListener('click', () => { 
+        if (cmEditor.getValue() && !confirm("Create a new file? Any unsaved changes will be lost.")) { return; }
+        cmEditor.setValue(''); currentFileHandle = null; currentFileName = 'Untitled.md';
+        localStorage.removeItem(sessionKey); updateMetaPanel(); 
+    });
+    dom.openFileBtn.addEventListener('click', openFile);
+    dom.saveFileBtn.addEventListener('click', saveFile);
+    dom.exportHtmlBtn.addEventListener('click', runExportHtml);
+    dom.exportDocxBtn.addEventListener('click', runExportDocx);
+
+    function openSettings() { dom.settingsModal.style.display = 'flex'; }
+    function closeSettings() { dom.settingsModal.style.display = 'none'; }
+    dom.settingsBtn.addEventListener('click', openSettings);
+    dom.closeSettingsBtn.addEventListener('click', closeSettings);
+    dom.settingsModal.addEventListener('click', (e) => { if (e.target === dom.settingsModal) { closeSettings(); } });
+    
+    function handleSettingsChange() {
+        const newSettings = {
+            keyMap: dom.keybindingSelect.value, fontSize: dom.fontSizeInput.value,
+            lineNumbers: dom.lineNumbersToggle.checked, lineWrapping: dom.lineWrappingToggle.checked,
+            autoCloseBrackets: dom.autoCloseBracketsToggle.checked, matchBrackets: dom.matchBracketsToggle.checked,
+            highlightActiveLine: dom.highlightActiveLineToggle.checked, codeFolding: dom.codeFoldingToggle.checked
+        };
+        currentSettings = newSettings;
+        localStorage.setItem(settingsKey, JSON.stringify(newSettings));
+        
+        cmEditor.setOption('keyMap', newSettings.keyMap);
+        cmWrapper.style.fontSize = `${newSettings.fontSize}px`;
+        cmEditor.setOption('lineNumbers', newSettings.lineNumbers);
+        cmEditor.setOption('lineWrapping', newSettings.lineWrapping);
+        cmEditor.setOption('autoCloseBrackets', newSettings.autoCloseBrackets);
+        cmEditor.setOption('matchBrackets', newSettings.matchBrackets);
+        cmEditor.setOption('styleActiveLine', newSettings.highlightActiveLine);
+        cmEditor.setOption('foldGutter', newSettings.codeFolding);
+        cmEditor.setOption('gutters', [
+            (newSettings.lineNumbers ? "CodeMirror-linenumbers" : ""),
+            (newSettings.codeFolding ? "CodeMirror-foldgutter" : "")
+        ].filter(Boolean));
+        cmEditor.refresh();
+    }
+    
+    ['keybindingSelect', 'fontSizeInput', 'lineNumbersToggle', 'lineWrappingToggle', 'autoCloseBracketsToggle', 'matchBracketsToggle', 'highlightActiveLineToggle', 'codeFoldingToggle'].forEach(id => {
+        const eventType = dom[id].type === 'number' ? 'input' : 'change';
+        dom[id].addEventListener(eventType, handleSettingsChange);
+    });
+
+    dom.setDirectoryBtn.addEventListener('click', async () => {
+        if (!window.showDirectoryPicker) { showToast("Your browser does not support setting a directory.", true); return; }
+        try {
+            const handle = await window.showDirectoryPicker();
+            directoryHandle = handle; await saveHandle(handle); showToast(`Working directory set to: ${handle.name}`);
+            await populateFileExplorer(); // --- NEW: Populate explorer after setting directory ---
+        } catch(err) { if (err.name !== 'AbortError') { console.error("Error setting directory:", err); showToast("Could not set directory.", true); } }
+    });
+
+    const commands = [
+        { name: "File: New File", action: () => dom.newFileBtn.click(), icon: "file-plus" },
+        { name: "File: Open...", action: openFile, icon: "folder-open" },
+        { name: "File: Save", action: saveFile, icon: "save" },
+        { name: "File: Save As...", action: saveFileAs, icon: "save-all" },
+        { name: "Editor: Find/Replace...", action: () => cmEditor.execCommand("replace"), icon: "search" },
+        { name: "Editor: Toggle Comment", action: () => cmEditor.execCommand("toggleComment"), icon: "message-square" },
+        { name: "Editor: Open Settings...", action: openSettings, icon: "settings" },
+        { name: "Toggle Dark/Light Theme", action: () => dom.themeToggle.click(), icon: "sun-moon" },
+        { name: "Toggle File Explorer", action: () => dom.toggleExplorerBtn.click(), icon: "panel-left" },
+        { name: "View: Side-by-Side", action: () => setViewMode('side-by-side'), icon: "square-split-horizontal" },
+        { name: "View: Source Only", action: () => setViewMode('source-only'), icon: "pencil" },
+        { name: "View: Preview Only", action: () => setViewMode('preview-only'), icon: "eye" },
+        { name: "Export: HTML", action: runExportHtml, icon: "file-code" },
+        { name: "Export: DOCX", action: runExportDocx, icon: "file-text" }
+    ];
+    function openPalette() { dom.commandPalette.style.display = 'block'; dom.commandPaletteInput.value = ''; commandPaletteOpen = true; renderCmdList(); dom.commandPaletteInput.focus(); }
+    function closePalette() { dom.commandPalette.style.display = 'none'; commandPaletteOpen = false; }
+    function renderCmdList() { 
+        const q = dom.commandPaletteInput.value.toLowerCase(); 
+        filteredCommands = commands.filter(c => c.name.toLowerCase().includes(q)); 
+        dom.commandPaletteList.innerHTML = '';
+        commandIndex = filteredCommands.length > 0 ? 0 : -1;
+        filteredCommands.forEach((c, i) => { 
+            const li = document.createElement('li');
+            li.innerHTML = `<i data-lucide="${c.icon || 'circle'}"></i><span>${c.name}</span>`;
+            if (i === commandIndex) { li.classList.add('active'); }
+            li.onclick = () => { c.action(); closePalette(); };
+            dom.commandPaletteList.appendChild(li);
+        });
+        lucide.createIcons({ context: dom.commandPaletteList });
+    }
+    dom.paletteButton.addEventListener('click', openPalette);
+    dom.commandPaletteInput.addEventListener('input', renderCmdList);
+    document.addEventListener('click', (e) => { if (commandPaletteOpen && !dom.commandPalette.contains(e.target) && e.target !== dom.paletteButton) { closePalette(); } });
+    
+    document.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); saveFile(); }
+        if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'p') { e.preventDefault(); commandPaletteOpen ? closePalette() : openPalette(); }
+        if (e.key === 'Escape') {
+            if(dom.settingsModal.style.display !== 'none') { closeSettings(); } 
+            else if (commandPaletteOpen) { closePalette(); }
+        }
+        if (!commandPaletteOpen) return;
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { 
+            e.preventDefault(); 
+            if (filteredCommands.length === 0) return;
+            dom.commandPaletteList.children[commandIndex]?.classList.remove('active');
+            const offset = e.key === 'ArrowDown' ? 1 : -1;
+            commandIndex = (commandIndex + offset + filteredCommands.length) % filteredCommands.length;
+            dom.commandPaletteList.children[commandIndex]?.classList.add('active');
+        }
+        if (e.key === 'Enter' && commandIndex > -1) { e.preventDefault(); filteredCommands[commandIndex].action(); closePalette(); }
+    });
+    
+    function downloadFile(name, content, mime) { const l = document.createElement('a'); l.href = URL.createObjectURL(new Blob([content], { type: mime })); l.download = name; document.body.appendChild(l); l.click(); document.body.removeChild(l); URL.revokeObjectURL(l.href); }
+    
+    async function runExportHtml() {
+        try {
+            const clonedPreview = dom.previewEl.cloneNode(true);
+            clonedPreview.querySelectorAll('script[type^="math/tex"]').forEach(script => script.remove());
+            clonedPreview.querySelectorAll('.katex-display, .katex').forEach(el => {
+                const sibling = el.nextSibling;
+                if (sibling && sibling.nodeType === 3 && sibling.textContent.trim().startsWith('$')) {
+                    sibling.remove();
+                }
+            });
+            const title = (currentFileName || 'document').replace(/\.\w+$/, '');
+            const css = Array.from(document.styleSheets).reduce((acc, sheet) => { try { return acc + Array.from(sheet.cssRules).map(r => r.cssText).join('\n'); } catch { return acc; } }, '');
+            const body = `<div id="preview" class="markdown-body">${clonedPreview.innerHTML}</div>`;
+            const html = `<!DOCTYPE html><html data-theme="${document.documentElement.getAttribute('data-theme')}"><head><meta charset="UTF-8"><title>${title}</title><style>${css}</style></head><body>${body}</body></html>`;
+            downloadFile(`${title}.html`, html, 'text/html');
+        } catch(e) {
+            showToast("HTML Export failed.", true);
+            console.error(e);
+        }
+    }
+    async function runExportDocx() { try { const offscreen = document.createElement('div'); offscreen.style.cssText = 'position:absolute;left:-9999px;width:800px;'; document.body.appendChild(offscreen); offscreen.innerHTML = dom.previewEl.innerHTML; await renderEnhancements(offscreen); const svgs = offscreen.querySelectorAll('svg'); for (const svg of svgs) { const pngDataUrl = await new Promise(resolve => { const i = new Image(); i.onload = () => { const c = document.createElement('canvas'); c.width = svg.getBBox().width; c.height = svg.getBBox().height; c.getContext('2d').drawImage(i, 0, 0); resolve(c.toDataURL('image/png')); }; i.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(new XMLSerializer().serializeToString(svg)); }); const img = document.createElement('img'); img.src = pngDataUrl; img.style.width = svg.clientWidth + 'px'; svg.parentNode.replaceChild(img, svg); } downloadFile(`${currentFileName.replace(/\.\w+$/, '')}.docx`, window.htmlDocx.asBlob(`<!DOCTYPE html><html><body>${offscreen.innerHTML}</body></html>`), 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'); document.body.removeChild(offscreen); } catch(e) { showToast("DOCX Export failed.", true); console.error(e); } }
+    
+    function loadSession() {
+        const savedContent = localStorage.getItem(sessionKey);
+        if (savedContent) { cmEditor.setValue(savedContent); showToast("Restored your last session."); }
+    }
+
+    lucide.createIcons();
+    const savedViewMode = localStorage.getItem('editor-view-mode') || 'side-by-side';
+    setViewMode(savedViewMode);
+    loadSettings();
+    
+    if (!currentFileHandle) { loadSession(); }
+
+    directoryHandle = await loadHandle();
+    if (directoryHandle) { await populateFileExplorer(); }
+    
+    if (!window.showDirectoryPicker) {
+        dom.setDirectoryBtn.disabled = true;
+        dom.setDirectoryBtn.style.opacity = 0.5;
+        dom.setDirectoryBtn.style.cursor = 'not-allowed';
+        dom.fileExplorer.classList.add('collapsed');
+        dom.explorerSplitter.classList.add('hidden');
+        dom.toggleExplorerBtn.style.display = 'none';
+    }
+    updatePreview();
+
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('service-worker.js').then(registration => {
+          console.log('ServiceWorker registration successful with scope: ', registration.scope);
+        }, err => {
+          console.log('ServiceWorker registration failed: ', err);
+        });
+      });
+    }
+})();
+</script>
+
+</body>
+</html>
